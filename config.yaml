@@ -1,0 +1,68 @@
+version: 2.1
+
+executors:
+  laravel_executor:
+    docker:
+      - image: cimg/php:8.3.9
+      - image: cimg/mysql:8.0
+        environment:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: circleci
+    working_directory: ~/repo
+
+jobs:
+  test:
+    executor: laravel_executor
+    steps:
+      - checkout
+
+      - run:
+          name: Install System Dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y unzip zip libzip-dev libpng-dev libonig-dev libxml2-dev
+            sudo docker-php-ext-install pdo_mysql zip
+
+      - run:
+          name: Install Composer
+          command: |
+            curl -sS https://getcomposer.org/installer | php
+            sudo mv composer.phar /usr/local/bin/composer
+
+      - run:
+          name: Install PHP dependencies
+          command: composer install --no-interaction --prefer-dist
+
+      - run:
+          name: Setup Laravel
+          command: |
+            cp .env.example .env
+            php artisan key:generate
+            php artisan config:clear
+            php artisan migrate --force
+
+      - run:
+          name: Run Laravel Tests
+          command: php artisan test
+
+  deploy:
+    docker:
+      - image: cimg/php:8.3.9
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "YOUR_SSH_FINGERPRINT"
+      - checkout
+      - run:
+          name: Deploy ke server
+          command: |
+            ssh user@yourserver.com "cd /path/to/laravel && git pull origin main && php artisan migrate --force"
+
+workflows:
+  version: 2
+  test_and_deploy:
+    jobs:
+      - test
+      - deploy:
+          requires:
+            - test
